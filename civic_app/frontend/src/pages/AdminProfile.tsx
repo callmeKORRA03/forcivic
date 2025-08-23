@@ -1,3 +1,4 @@
+// frontend/src/pages/AdminProfile.tsx
 import { useEffect, useState } from "react";
 import {
   Card,
@@ -54,8 +55,10 @@ interface Issues {
   adminResponse?: string;
 }
 
-const AdminProfile = () => {
-  const { user, updateUserProfile, token, isLoading } = useAuth();
+const AdminProfile: React.FC = () => {
+  // Use the actual props in your AuthContext
+  const { user, token, loading, setAuthFromServer } = useAuth();
+
   const [isEditing, setIsEditing] = useState(false);
   const [respondedIssues, setRespondedIssues] = useState<Issues[]>([]);
   const [loadingMyIssues, setLoadingMyIssues] = useState(true);
@@ -67,7 +70,17 @@ const AdminProfile = () => {
     department: user?.department || "",
   });
 
-  if (isLoading) {
+  // Keep the local form in sync if the context user changes
+  useEffect(() => {
+    setProfile({
+      fullName: user?.fullName || "",
+      email: user?.email || "",
+      phonenumber: user?.phonenumber || "",
+      department: user?.department || "",
+    });
+  }, [user]);
+
+  if (loading) {
     return <p className="text-center mt-10">Loading profile...</p>;
   }
 
@@ -75,14 +88,78 @@ const AdminProfile = () => {
     return <p className="text-center mt-10">Loading profile...</p>;
   }
 
+  // Local implementation of updateUserProfile that your component previously expected
+  const updateUserProfile = async (payload: {
+    fullName?: string;
+    email?: string;
+    phonenumber?: string;
+    department?: string;
+  }) => {
+    try {
+      const url = `${VITE_BACKEND_URL}/api/v1/user/update-profile`;
+      const resp = await fetch(url, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (resp.status === 401) {
+        toast.error("Unauthorized. Please log in again.");
+        return null;
+      }
+
+      const data = await resp.json();
+
+      if (!resp.ok) {
+        console.error("Profile update failed:", data);
+        throw new Error(data.message || "Profile update failed");
+      }
+
+      // Assume backend returns updated user object (common pattern)
+      const updatedUser = data.user ?? data.updatedUser ?? null;
+      const returnedToken = data.token ?? data.jwt ?? data.accessToken ?? token;
+
+      // Update context via setAuthFromServer if available, otherwise localStorage fallback
+      if (typeof setAuthFromServer === "function") {
+        setAuthFromServer(returnedToken, updatedUser);
+      } else {
+        // fallback: update localStorage directly
+        if (returnedToken) localStorage.setItem("token", returnedToken);
+        else localStorage.removeItem("token");
+
+        if (updatedUser)
+          localStorage.setItem("user", JSON.stringify(updatedUser));
+        else localStorage.removeItem("user");
+      }
+
+      return updatedUser;
+    } catch (err) {
+      console.error("updateUserProfile error:", err);
+      throw err;
+    }
+  };
+
   const handleSaveProfile = async () => {
     try {
-      await updateUserProfile({
+      const updatedUser = await updateUserProfile({
         fullName: profile.fullName,
         email: profile.email,
         phonenumber: profile.phonenumber,
         department: profile.department,
       });
+
+      // update local UI state if backend returned user
+      if (updatedUser) {
+        setProfile({
+          fullName: (updatedUser as any).fullName || profile.fullName,
+          email: (updatedUser as any).email || profile.email,
+          phonenumber: (updatedUser as any).phonenumber || profile.phonenumber,
+          department: (updatedUser as any).department || profile.department,
+        });
+      }
 
       toast.success("Profile updated successfully!");
       setIsEditing(false);
@@ -146,6 +223,7 @@ const AdminProfile = () => {
         return "bg-gray-100 text-gray-800";
     }
   };
+
   if (loadingMyIssues) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -153,6 +231,14 @@ const AdminProfile = () => {
       </div>
     );
   }
+
+  const initials = (profile.fullName || user.fullName || "")
+    .split(" ")
+    .filter(Boolean)
+    .map((n) => n[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
 
   return (
     <div className="min-h-screen bg-[#f3f6f8]">
@@ -177,10 +263,7 @@ const AdminProfile = () => {
                 <Avatar className="h-20 w-20 ">
                   <AvatarImage src="/placeholder.svg" />
                   <AvatarFallback className="text-lg bg-[#bedbff] ">
-                    {profile.fullName
-                      .split(" ")
-                      .map((n) => n[0])
-                      .join("")}
+                    {initials || "?"}
                   </AvatarFallback>
                 </Avatar>
                 <div>

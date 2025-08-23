@@ -1,3 +1,4 @@
+// frontend/src/pages/CitizenProfile.tsx
 import { useEffect, useState } from "react";
 import {
   Card,
@@ -41,10 +42,11 @@ interface Issues {
   status: string;
 }
 
-const CitizenProfile = () => {
-  const { user, updateUserProfile, token, isLoading } = useAuth();
-  const [isEditing, setIsEditing] = useState(false);
+const CitizenProfile: React.FC = () => {
+  // Use the actual AuthContext shape: user, token, loading, setAuthFromServer
+  const { user, token, loading, setAuthFromServer } = useAuth();
 
+  const [isEditing, setIsEditing] = useState(false);
   const [myIssues, setMyIssues] = useState<Issues[]>([]);
   const [loadingMyIssues, setLoadingMyIssues] = useState(true);
 
@@ -54,8 +56,17 @@ const CitizenProfile = () => {
     phonenumber: user?.phonenumber || "",
   });
 
+  // keep local form in sync with context user
+  useEffect(() => {
+    setProfile({
+      fullName: user?.fullName || "",
+      email: user?.email || "",
+      phonenumber: user?.phonenumber || "",
+    });
+  }, [user]);
+
   // Show loading state until AuthContext is ready
-  if (isLoading) {
+  if (loading) {
     return <p className="text-center mt-10">Loading profile...</p>;
   }
 
@@ -63,13 +74,73 @@ const CitizenProfile = () => {
     return <p className="text-center mt-10">Loading profile...</p>;
   }
 
+  // Local update function (used instead of destructuring updateUserProfile)
+  const updateUserProfile = async (payload: {
+    fullName?: string;
+    email?: string;
+    phonenumber?: string;
+  }) => {
+    try {
+      const url = `${VITE_BACKEND_URL}/api/v1/user/update-profile`;
+      const resp = await fetch(url, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (resp.status === 401) {
+        toast.error("Unauthorized. Please log in again.");
+        return null;
+      }
+
+      const data = await resp.json();
+
+      if (!resp.ok) {
+        console.error("Profile update failed:", data);
+        throw new Error(data.message || "Profile update failed");
+      }
+
+      // prefer returned user and token if backend provides them
+      const updatedUser = data.user ?? data.updatedUser ?? null;
+      const returnedToken = data.token ?? data.jwt ?? data.accessToken ?? token;
+
+      if (typeof setAuthFromServer === "function") {
+        setAuthFromServer(returnedToken, updatedUser);
+      } else {
+        // fallback: update localStorage directly
+        if (returnedToken) localStorage.setItem("token", returnedToken);
+        else localStorage.removeItem("token");
+
+        if (updatedUser)
+          localStorage.setItem("user", JSON.stringify(updatedUser));
+        else localStorage.removeItem("user");
+      }
+
+      return updatedUser;
+    } catch (err) {
+      console.error("updateUserProfile error:", err);
+      throw err;
+    }
+  };
+
   const handleSaveProfile = async () => {
     try {
-      await updateUserProfile({
+      const updatedUser = await updateUserProfile({
         fullName: profile.fullName,
         email: profile.email,
         phonenumber: profile.phonenumber,
       });
+
+      if (updatedUser) {
+        setProfile({
+          fullName: (updatedUser as any).fullName || profile.fullName,
+          email: (updatedUser as any).email || profile.email,
+          phonenumber: (updatedUser as any).phonenumber || profile.phonenumber,
+        });
+      }
 
       toast.success("Profile updated successfully!");
       setIsEditing(false);
@@ -136,6 +207,14 @@ const CitizenProfile = () => {
     }
   };
 
+  const initials = (profile.fullName || user.fullName || "")
+    .split(" ")
+    .filter(Boolean)
+    .map((n) => n[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+
   return (
     <div className="min-h-screen bg-[#f3f6f8]">
       {/* Navbar */}
@@ -159,10 +238,7 @@ const CitizenProfile = () => {
                 <Avatar className="h-20 w-20">
                   <AvatarImage src="/placeholder.svg" />
                   <AvatarFallback className="text-lg bg-[#bedbff]">
-                    {profile.fullName
-                      .split(" ")
-                      .map((n) => n[0])
-                      .join("")}
+                    {initials || "?"}
                   </AvatarFallback>
                 </Avatar>
                 <div>
@@ -250,17 +326,7 @@ const CitizenProfile = () => {
 
         {/* Issues Statistics */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card
-            className="bg-white/70 
-  border border-white/20 
-  shadow-lg 
-  rounded-xl 
-  p-6 
-  ring-1 ring-white/10 
-  hover:shadow-xl transition-shadow duration-300 
-  hover:scale-[1.02] transition-transform
- "
-          >
+          <Card className="bg-white/70 border border-white/20 shadow-lg rounded-xl p-6 ring-1 ring-white/10 hover:shadow-xl transition-shadow duration-300 hover:scale-[1.02] transition-transform">
             <CardContent className="p-6">
               <div className="text-2xl font-bold">{myIssues.length}</div>
               <p className="text-xs text-muted-foreground">
@@ -268,17 +334,8 @@ const CitizenProfile = () => {
               </p>
             </CardContent>
           </Card>
-          <Card
-            className="bg-white/70 
-  border border-white/20 
-  shadow-lg 
-  rounded-xl 
-  p-6 
-  ring-1 ring-white/10 
-  hover:shadow-xl transition-shadow duration-300 
-  hover:scale-[1.02] transition-transform
-  "
-          >
+
+          <Card className="bg-white/70 border border-white/20 shadow-lg rounded-xl p-6 ring-1 ring-white/10 hover:shadow-xl transition-shadow duration-300 hover:scale-[1.02] transition-transform">
             <CardContent className="p-6">
               <div className="text-2xl font-bold text-green-600">
                 {myIssues.filter((issue) => issue.status === "Resolved").length}
@@ -286,17 +343,8 @@ const CitizenProfile = () => {
               <p className="text-xs text-muted-foreground">Resolved</p>
             </CardContent>
           </Card>
-          <Card
-            className="bg-white/70 
-  border border-white/20 
-  shadow-lg 
-  rounded-xl 
-  p-6 
-  ring-1 ring-white/10 
-  hover:shadow-xl transition-shadow duration-300 
-  hover:scale-[1.02] transition-transform
-"
-          >
+
+          <Card className="bg-white/70 border border-white/20 shadow-lg rounded-xl p-6 ring-1 ring-white/10 hover:shadow-xl transition-shadow duration-300 hover:scale-[1.02] transition-transform">
             <CardContent className="p-6">
               <div className="text-2xl font-bold text-blue-600">
                 {
@@ -307,17 +355,8 @@ const CitizenProfile = () => {
               <p className="text-xs text-muted-foreground">In Progress</p>
             </CardContent>
           </Card>
-          <Card
-            className="bg-white/70 
-  border border-white/20 
-  shadow-lg 
-  rounded-xl 
-  p-6 
-  ring-1 ring-white/10 
-  hover:shadow-xl transition-shadow duration-300 
-  hover:scale-[1.02] transition-transform
-  "
-          >
+
+          <Card className="bg-white/70 border border-white/20 shadow-lg rounded-xl p-6 ring-1 ring-white/10 hover:shadow-xl transition-shadow duration-300 hover:scale-[1.02] transition-transform">
             <CardContent className="p-6">
               <div className="text-2xl font-bold text-yellow-600">
                 {myIssues.filter((issue) => issue.status === "Pending").length}
@@ -328,16 +367,7 @@ const CitizenProfile = () => {
         </div>
 
         {/* Reported Issues */}
-        <Card
-          className="bg-white/70 
-  border border-white/20 
-  shadow-lg 
-  rounded-xl 
-  p-6 
-  ring-1 ring-white/10 
-  hover:shadow-xl transition-shadow duration-300 
-  "
-        >
+        <Card className="bg-white/70 border border-white/20 shadow-lg rounded-xl p-6 ring-1 ring-white/10 hover:shadow-xl transition-shadow duration-300">
           <CardHeader>
             <CardTitle className="flex items-center space-x-2 text-slate-700">
               <FileText className="h-5 w-5 text-indigo-500 hover:text-indigo-700  transition duration-300" />

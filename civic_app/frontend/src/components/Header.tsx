@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { Button } from "./ui/button.tsx";
-import { LogIn, LogOut, Shield, User } from "lucide-react";
+import { LogOut, User } from "lucide-react";
 import civicIssueLogo from "../assets/civic-issue.png";
 import { useAuth } from "../contexts/AuthContext.tsx";
 import { handleSupportClick } from "./SupportModel.tsx";

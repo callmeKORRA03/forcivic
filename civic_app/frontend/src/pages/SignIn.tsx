@@ -1,3 +1,4 @@
+// frontend/src/pages/SignIn.tsx
 import React, { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import civicIssueLogo from "../assets/civic-issue.png";
@@ -22,8 +23,9 @@ import { Button } from "../components/ui/button";
 import { useAuth } from "../contexts/AuthContext";
 import { AnimatePresence, motion } from "framer-motion";
 import { useLoader } from "../contexts/LoaderContext";
+import { VITE_BACKEND_URL } from "../config/config";
 
-const SignIn = () => {
+const SignIn: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [citizenForm, setCitizenForm] = useState({ email: "", password: "" });
   const [adminForm, setAdminForm] = useState({
@@ -34,8 +36,61 @@ const SignIn = () => {
   const [activeTab, setActiveTab] = useState<"citizen" | "admin">("citizen");
 
   const navigate = useNavigate();
-  const { login } = useAuth();
+  // NOTE: we no longer assume a `login` function exists in the context.
+  const { setAuthFromServer } = useAuth();
   const { showLoader, hideLoader } = useLoader();
+
+  // local login implementation (returns boolean)
+  const login = async (
+    email: string,
+    password: string,
+    role: "citizen" | "admin",
+    adminAccessCode?: string
+  ): Promise<boolean> => {
+    try {
+      const url = `${VITE_BACKEND_URL}/api/v1/auth/login`; // adapt if your backend uses a different path
+      const body: Record<string, any> = { email, password, role };
+      if (role === "admin" && adminAccessCode)
+        body.adminAccessCode = adminAccessCode;
+
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      if (resp.status === 401) {
+        return false;
+      }
+
+      const data = await resp.json();
+
+      if (!resp.ok) {
+        console.error("Login failed:", data);
+        return false;
+      }
+
+      // backend is expected to return a token and a user object
+      const token = data.token ?? data.jwt ?? data.accessToken ?? null;
+      const user = data.user ?? data.userData ?? null;
+
+      if (typeof setAuthFromServer === "function") {
+        setAuthFromServer(token, user);
+      } else {
+        // fallback: persist locally
+        if (token) localStorage.setItem("token", token);
+        else localStorage.removeItem("token");
+
+        if (user) localStorage.setItem("user", JSON.stringify(user));
+        else localStorage.removeItem("user");
+      }
+
+      return true;
+    } catch (err) {
+      console.error("Login error:", err);
+      return false;
+    }
+  };
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
