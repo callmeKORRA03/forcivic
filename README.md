@@ -32,7 +32,7 @@ Key features
 
 ## Screenshot / Preview
 
-> Replace the images in `frontend/public/Assets/` or update paths below.
+
 
 Landing page  
 ![HomePreview](Assets/Home.png)
