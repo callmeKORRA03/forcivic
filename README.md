@@ -11,7 +11,7 @@
 > Civic Issue Reporter — a real-time civic issue reporting platform (forked & extended).  
 > Built originally by **kass69** — this repository contains my changes and fixes for hackathon integration with Civic Auth. Big thanks and respect to the original author: https://github.com/kass69
 
-Live demo: https://civic-issue-reporter-application.vercel.app/
+
 
 ---
 
